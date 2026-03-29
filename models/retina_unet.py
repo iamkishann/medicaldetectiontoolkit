@@ -23,7 +23,7 @@ import utils.model_utils as mutils
 import utils.exp_utils as utils
 import sys
 sys.path.append('../')
-from cuda_functions.nms_2D.pth_nms import nms_gpu as nms_2D
+from cuda_functions.nms_2D.python_nms import nms_gpu as nms_2D
 from cuda_functions.nms_3D.pth_nms import nms_gpu as nms_3D
 
 import numpy as np

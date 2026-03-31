@@ -28,6 +28,13 @@ import nrrd
 from copy import deepcopy
 from skimage.segmentation import clear_border
 
+import sys
+import os
+
+# Add repo root explicitly BEFORE any local imports
+sys.path.insert(0, '/Users/sarvaiyak/Desktop/school/cs591-healthcare/medicaldetectiontoolkit')
+sys.path.append(os.path.dirname(os.path.realpath(__file__))) 
+
 import configs
 cf = configs.configs()
 

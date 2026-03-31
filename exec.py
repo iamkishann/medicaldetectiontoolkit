@@ -35,7 +35,8 @@ def train(logger):
     logger.info('performing training in {}D over fold {} on experiment {} with model {}'.format(
         cf.dim, cf.fold, cf.exp_dir, cf.model))
 
-    net = model.net(cf, logger).cuda()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    net = model.net(cf, logger).to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=cf.learning_rate[0], weight_decay=cf.weight_decay)
     model_selector = utils.ModelSelector(cf, logger)
     train_evaluator = Evaluator(cf, logger, mode='train')
@@ -115,7 +116,8 @@ def test(logger):
     perform testing for a given fold (or hold out set). save stats in evaluator.
     """
     logger.info('starting testing model of fold {} in exp {}'.format(cf.fold, cf.exp_dir))
-    net = model.net(cf, logger).cuda()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    net = model.net(cf, logger).to(device)
     test_predictor = Predictor(cf, net, logger, mode='test')
     test_evaluator = Evaluator(cf, logger, mode='test')
     batch_gen = data_loader.get_test_generator(cf, logger)

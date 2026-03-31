@@ -28,9 +28,9 @@ class configs(DefaultConfigs):
         #    Preprocessing      #
         #########################
 
-        self.root_dir = '/mnt/hdd2/basel_lung/'
+        self.root_dir = '/Users/sarvaiyak/Desktop/school/cs591-healthcare/data'
         self.raw_data_dir = '{}/LungStageData'.format(self.root_dir)
-        self.pp_dir = '/media/paul/ssd1/pp_norm_basel'
+        self.pp_dir = '/Users/sarvaiyak/Desktop/school/cs591-healthcare/data/pp_norm_basel'
 
         #########################
         #         I/O           #

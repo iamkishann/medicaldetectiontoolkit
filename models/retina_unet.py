@@ -24,7 +24,9 @@ import utils.exp_utils as utils
 import sys
 sys.path.append('../')
 from cuda_functions.nms_2D.python_nms import nms_gpu as nms_2D
-from cuda_functions.nms_3D.pth_nms import nms_gpu as nms_3D
+
+# Lazy import for 3D NMS (only needed if dim == 3)
+nms_3D = None
 
 import numpy as np
 import torch
@@ -247,6 +249,11 @@ def refine_detections(anchors, probs, deltas, batch_ixs, cf):
             if cf.dim == 2:
                 class_keep = nms_2D(torch.cat((ix_rois, ix_scores.unsqueeze(1)), dim=1), cf.detection_nms_threshold)
             else:
+                # Lazy import for 3D NMS (only if actually needed)
+                global nms_3D
+                if nms_3D is None:
+                    from cuda_functions.nms_3D.pth_nms import nms_gpu as nms_3D_import
+                    nms_3D = nms_3D_import
                 class_keep = nms_3D(torch.cat((ix_rois, ix_scores.unsqueeze(1)), dim=1), cf.detection_nms_threshold)
 
             # map indices back.
@@ -371,7 +378,8 @@ class net(nn.Module):
 
         # build Anchors, FPN, Classifier / Bbox-Regressor -head
         self.np_anchors = mutils.generate_pyramid_anchors(self.logger, self.cf)
-        self.anchors = torch.from_numpy(self.np_anchors).float().cuda()
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.anchors = torch.from_numpy(self.np_anchors).float().to(device)
         self.Fpn = backbone.FPN(self.cf, conv, operate_stride1=self.cf.operate_stride1)
         self.Classifier = Classifier(self.cf, conv)
         self.BBRegressor = BBRegressor(self.cf, conv)

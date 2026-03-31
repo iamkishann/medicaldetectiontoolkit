@@ -16,7 +16,7 @@ def gpu_nms(keep, num_out, boxes, nms_overlap_thresh):
 
     if boxes.is_cuda:
         boxes = boxes.cpu()
-    boxes = boxes.contiguous()
+    boxes = boxes.contiguous().detach()
 
     x1 = boxes[:, 0].numpy()
     y1 = boxes[:, 1].numpy()
@@ -77,9 +77,9 @@ def cpu_nms(keep_out, num_out, boxes, order, areas, nms_overlap_thresh):
     if areas.is_cuda:
         areas = areas.cpu()
 
-    boxes = boxes.contiguous()
-    order = order.contiguous()
-    areas = areas.contiguous()
+    boxes = boxes.contiguous().detach()
+    order = order.contiguous().detach()
+    areas = areas.contiguous().detach()
 
     boxes_np = boxes.numpy()
     order_np = order.numpy()
@@ -145,7 +145,7 @@ def nms_cpu(dets, thresh):
     """High-level wrapper compatible with pth_nms.nms_cpu.
     Returns `keep` tensor containing kept indices (in sorted-order reference).
     """
-    dets = dets.cpu()
+    dets = dets.cpu().detach()
     x1 = dets[:, 0]
     y1 = dets[:, 1]
     x2 = dets[:, 2]

@@ -145,7 +145,7 @@ def compute_class_loss(anchor_matches, class_pred_logits, shem_poolsize=20):
         targets_pos = anchor_matches[pos_indices]
         pos_loss = F.cross_entropy(roi_logits_pos, targets_pos.long())
     else:
-        pos_loss = torch.FloatTensor([0]).cuda()
+        pos_loss = torch.FloatTensor([0]).to(anchor_matches.device)
 
     # get negative samples, such that the amount matches the number of positive samples, but at least 1.
     # get high scoring negatives by applying online-hard-example-mining.
@@ -155,11 +155,11 @@ def compute_class_loss(anchor_matches, class_pred_logits, shem_poolsize=20):
         negative_count = np.max((1, pos_indices.size()[0]))
         roi_probs_neg = F.softmax(roi_logits_neg, dim=1)
         neg_ix = mutils.shem(roi_probs_neg, negative_count, shem_poolsize)
-        neg_loss = F.cross_entropy(roi_logits_neg[neg_ix], torch.LongTensor([0] * neg_ix.shape[0]).cuda())
+        neg_loss = F.cross_entropy(roi_logits_neg[neg_ix], torch.LongTensor([0] * neg_ix.shape[0]).to(anchor_matches.device))
         # return the indices of negative samples, which contributed to the loss (for monitoring plots).
         np_neg_ix = neg_ix.cpu().data.numpy()
     else:
-        neg_loss = torch.FloatTensor([0]).cuda()
+        neg_loss = torch.FloatTensor([0]).to(anchor_matches.device)
         np_neg_ix = np.array([]).astype('int32')
 
     loss = (pos_loss + neg_loss) / 2
@@ -184,7 +184,8 @@ def compute_bbox_loss(target_deltas, pred_deltas, anchor_matches):
         # Smooth L1 loss
         loss = F.smooth_l1_loss(pred_deltas, target_deltas)
     else:
-        loss = torch.FloatTensor([0]).cuda()
+        device = target_deltas.device if isinstance(target_deltas, torch.Tensor) else torch.device('cpu')
+        loss = torch.FloatTensor([0]).to(device)
 
     return loss
 
@@ -213,16 +214,18 @@ def refine_detections(anchors, probs, deltas, batch_ixs, cf):
     # reshape indices to 2D index array with shape like fg_probs.
     keep_arr = torch.cat(((keep_ix / fg_probs.shape[1]).unsqueeze(1), (keep_ix % fg_probs.shape[1]).unsqueeze(1)), 1)
 
+    keep_arr = keep_arr.long()
     pre_nms_scores = flat_probs[:cf.pre_nms_limit]
     pre_nms_class_ids = keep_arr[:, 1] + 1  # add background again.
     pre_nms_batch_ixs = batch_ixs[keep_arr[:, 0]]
     pre_nms_anchors = anchors[keep_arr[:, 0]]
     pre_nms_deltas = deltas[keep_arr[:, 0]]
-    keep = torch.arange(pre_nms_scores.size()[0]).long().cuda()
+    device = probs.device if isinstance(probs, torch.Tensor) else torch.device('cpu')
+    keep = torch.arange(pre_nms_scores.size()[0]).long().to(device)
 
     # apply bounding box deltas. re-scale to image coordinates.
-    std_dev = torch.from_numpy(np.reshape(cf.rpn_bbox_std_dev, [1, cf.dim * 2])).float().cuda()
-    scale = torch.from_numpy(cf.scale).float().cuda()
+    std_dev = torch.from_numpy(np.reshape(cf.rpn_bbox_std_dev, [1, cf.dim * 2])).float().to(device)
+    scale = torch.from_numpy(cf.scale).float().to(device)
     refined_rois = mutils.apply_box_deltas_2D(pre_nms_anchors / scale, pre_nms_deltas * std_dev) * scale \
         if cf.dim == 2 else mutils.apply_box_deltas_3D(pre_nms_anchors / scale, pre_nms_deltas * std_dev) * scale
 
@@ -400,12 +403,14 @@ class net(nn.Module):
         img = batch['data']
         gt_class_ids = batch['roi_labels']
         gt_boxes = batch['bb_target']
-        var_seg_ohe = torch.FloatTensor(mutils.get_one_hot_encoding(batch['seg'], self.cf.num_seg_classes)).cuda()
-        var_seg = torch.LongTensor(batch['seg']).cuda()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        img = torch.from_numpy(img).float().cuda()
-        batch_class_loss = torch.FloatTensor([0]).cuda()
-        batch_bbox_loss = torch.FloatTensor([0]).cuda()
+        var_seg_ohe = torch.FloatTensor(mutils.get_one_hot_encoding(batch['seg'], self.cf.num_seg_classes)).to(device)
+        var_seg = torch.LongTensor(batch['seg']).to(device)
+
+        img = torch.from_numpy(img).float().to(device)
+        batch_class_loss = torch.FloatTensor([0]).to(device)
+        batch_bbox_loss = torch.FloatTensor([0]).to(device)
 
         # list of output boxes for monitoring/plotting. each element is a list of boxes per batch element.
         box_results_list = [[] for _ in range(img.shape[0])]
@@ -434,8 +439,8 @@ class net(nn.Module):
                 anchor_class_match = np.array([-1]*self.np_anchors.shape[0])
                 anchor_target_deltas = np.array([0])
 
-            anchor_class_match = torch.from_numpy(anchor_class_match).cuda()
-            anchor_target_deltas = torch.from_numpy(anchor_target_deltas).float().cuda()
+            anchor_class_match = torch.from_numpy(anchor_class_match).to(device)
+            anchor_target_deltas = torch.from_numpy(anchor_target_deltas).float().to(device)
 
             # compute losses.
             class_loss, neg_anchor_ix = compute_class_loss(anchor_class_match, class_logits[b])
@@ -476,7 +481,8 @@ class net(nn.Module):
                             retina_unet and dummy array for retina_net.
         """
         img = batch['data']
-        img = torch.from_numpy(img).float().cuda()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        img = torch.from_numpy(img).float().to(device)
         detections, _, _, seg_logits = self.forward(img)
         results_dict = get_results(self.cf, img.shape, detections, seg_logits)
         return results_dict
@@ -513,7 +519,8 @@ class net(nn.Module):
         bb_outputs = [torch.cat(list(o), dim=1) for o in bb_outputs][0]
 
         # merge batch_dimension and store info in batch_ixs for re-allocation.
-        batch_ixs = torch.arange(class_logits.shape[0]).unsqueeze(1).repeat(1, class_logits.shape[1]).view(-1).cuda()
+        device = class_logits.device
+        batch_ixs = torch.arange(class_logits.shape[0]).unsqueeze(1).repeat(1, class_logits.shape[1]).view(-1).to(device)
         flat_class_softmax = F.softmax(class_logits.view(-1, class_logits.shape[-1]), 1)
         flat_bb_outputs = bb_outputs.view(-1, bb_outputs.shape[-1])
         detections = refine_detections(self.anchors, flat_class_softmax, flat_bb_outputs, batch_ixs, self.cf)

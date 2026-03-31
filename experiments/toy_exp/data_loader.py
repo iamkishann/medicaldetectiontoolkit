@@ -34,6 +34,14 @@ from batchgenerators.transforms.crop_and_pad_transforms import CenterCropTransfo
 from batchgenerators.transforms.utility_transforms import ConvertSegToBoundingBoxCoordinates
 
 
+class EnsureRoiLabelsTransform(object):
+    """Ensure the output batch has roi_labels for compatibility with Retina U-Net training."""
+    def __call__(self, **data_dict):
+        if 'roi_labels' not in data_dict and 'class_target' in data_dict:
+            data_dict['roi_labels'] = data_dict['class_target']
+        return data_dict
+
+
 
 def get_train_generators(cf, logger):
     """
@@ -178,10 +186,14 @@ def create_data_gen_pipeline(patient_data, cf, do_aug=True):
         my_transforms.append(CenterCropTransform(crop_size=cf.patch_size[:cf.dim]))
 
     my_transforms.append(ConvertSegToBoundingBoxCoordinates(cf.dim, get_rois_from_seg_flag=False, class_specific_seg_flag=cf.class_specific_seg_flag))
+    my_transforms.append(EnsureRoiLabelsTransform())
     all_transforms = Compose(my_transforms)
-    # multithreaded_generator = SingleThreadedAugmenter(data_gen, all_transforms)
-    multithreaded_generator = MultiThreadedAugmenter(data_gen, all_transforms, num_processes=cf.n_workers, seeds=range(cf.n_workers))
-    return multithreaded_generator
+
+    if cf.n_workers == 1:
+        # Avoid multiprocessing pickling issues on macOS / spawn contexts.
+        return SingleThreadedAugmenter(data_gen, all_transforms)
+
+    return MultiThreadedAugmenter(data_gen, all_transforms, num_processes=cf.n_workers, seeds=range(cf.n_workers))
 
 
 class BatchGenerator(SlimDataLoaderBase):
@@ -260,6 +272,11 @@ class PatientBatchIterator(SlimDataLoaderBase):
         batch_2D = {'data': out_data, 'seg': out_seg, 'class_target': batch_class_targets, 'pid': pid}
         converter = ConvertSegToBoundingBoxCoordinates(dim=2, get_rois_from_seg_flag=False, class_specific_seg_flag=self.cf.class_specific_seg_flag)
         batch_2D = converter(**batch_2D)
+
+        if 'roi_labels' not in batch_2D:
+            batch_2D['roi_labels'] = batch_2D.get('class_target', np.array([-1]))
+        if 'bb_target' not in batch_2D:
+            batch_2D['bb_target'] = np.array([])
 
         batch_2D.update({'patient_bb_target': batch_2D['bb_target'],
                          'patient_roi_labels': batch_2D['roi_labels'],

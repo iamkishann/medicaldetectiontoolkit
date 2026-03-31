@@ -16,6 +16,11 @@
 
 import sys
 import os
+# ensure project root is on sys.path to import default_configs from repo root
+repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 import numpy as np
 from default_configs import DefaultConfigs
@@ -47,7 +52,10 @@ class configs(DefaultConfigs):
         self.select_prototype_subset = None
         self.hold_out_test_set = True
         # including val set. will be 3/4 train, 1/4 val.
-        self.n_train_val_data = 1500
+        self.n_train_val_data = 15  # limited by generated toy dataset size for local testing
+
+        # number of batch generator worker processes (1 = no multiprocessing for macOS compatibility)
+        self.n_workers = 1
 
         # choose one of the 3 toy experiments described in https://arxiv.org/pdf/1811.08661.pdf
         # one of ['donuts_shape', 'donuts_pattern', 'circles_scale'].
@@ -117,7 +125,7 @@ class configs(DefaultConfigs):
         #########################
 
         self.num_epochs = 24
-        self.num_train_batches = 100 if self.dim == 2 else 200
+        self.num_train_batches = 10  # reduced from 100 for faster testing
         self.batch_size = 20 if self.dim == 2 else 8
 
         self.do_validation = True

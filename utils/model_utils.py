@@ -687,8 +687,8 @@ def shem(roi_probs_neg, negative_count, ohem_poolsize):
     probs, order = roi_probs_neg[:, 1:].max(1)[0].sort(descending=True)
     select = torch.tensor((ohem_poolsize * int(negative_count), order.size()[0])).min().int()
     pool_indices = order[:select]
-    rand_idx = torch.randperm(pool_indices.size()[0])
-    return pool_indices[rand_idx[:negative_count].cuda()]
+    rand_idx = torch.randperm(pool_indices.size()[0], device=pool_indices.device)
+    return pool_indices[rand_idx[:negative_count].to(pool_indices.device)]
 
 
 
